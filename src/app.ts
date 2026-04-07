@@ -103,7 +103,7 @@ function destinationPage(path: string, userId: string): string {
 }
 
 function loginPage(destinationUrl: string): string {
-  const loginHref = `https://preprod.dr.dk/nap/vm2026/login`;
+  const loginHref = `https://preprod.dr.dk/nap/vm2026/login?destinationUrl=${encodeURIComponent(destinationUrl)}`;
 
   return pageShell("Log ind – VMSpillet", `
     <h1>Du er ikke logget ind</h1>
