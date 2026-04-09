@@ -93,12 +93,12 @@ function pageShell(title: string, body: string): string {
     </html>`;
 }
 
-function destinationPage(path: string, userId: string): string {
+function destinationPage(destinationUrl: string, userId: string): string {
   return pageShell("VMSpillet", `
     <span class="badge">Logget ind</span>
     <h1>VMSpillet</h1>
     <p>Du er nu logget ind som <strong>${userId}</strong></p>
-    <p>Side: <code>${path}</code></p>
+    <p>Side: <code>${destinationUrl}</code></p>
   `);
 }
 
@@ -110,6 +110,16 @@ function loginPage(destinationUrl: string): string {
     <p>Log ind for at fortsætte til <code>${destinationUrl}</code></p>
     <a class="btn" href="${loginHref}">Log ind</a>
   `);
+}
+
+function fullRequestUrl(req: Request): string {
+  return req.originalUrl || req.path;
+}
+
+function destinationUrlForAuthLogin(req: Request): string {
+  const url = new URL(fullRequestUrl(req), "http://localhost");
+  url.searchParams.delete("appLoggedIn");
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,8 +145,8 @@ export function createApp() {
   });
 
   // -----------------------------------------------------------------------
-  // Auth endpoint – the Newsapp is redirected here when there's no session
-  // and appLoggedIn=true.  The redirect carries the original destinationUrl so
+  // Auth endpoint – the Newsapp is redirected here when there's no session.
+  // The redirect carries the original destinationUrl so
   // the app can parse it and come back with a Bearer token.
   //
   // In practice the WebView never actually loads this page; it intercepts the
@@ -154,8 +164,8 @@ export function createApp() {
   //
   //  1. Session cookie exists          → 200 destination page
   //  2. No session + Bearer token      → create session, 302 back (Set-Cookie)
-  //  3. No session + appLoggedIn=true     → 302 → /auth/login?destinationUrl=…
-  //  4. No session + appLoggedIn missing  → 200 login page with link
+  //  3. No session + appLoggedIn=true  → 302 → /auth/login?destinationUrl=…
+  //  4. No session + appLoggedIn missing/false → 200 login page with link
   // -----------------------------------------------------------------------
   app.get("/{*splat}", (req: Request, res: Response) => {
     const sessionId = req.cookies?.session_id;
@@ -164,7 +174,7 @@ export function createApp() {
     if (sessionId && sessions.has(sessionId)) {
       const session = sessions.get(sessionId)!;
       console.log(`  → Branch 1: session found (${sessionId.slice(0, 8)}…, user=${session.userId})`);
-      res.status(200).send(destinationPage(req.path, session.userId));
+      res.status(200).send(destinationPage(destinationUrlForAuthLogin(req), session.userId));
       return;
     }
 
@@ -200,7 +210,7 @@ export function createApp() {
       const newSessionId = uuid();
       sessions.set(newSessionId, { userId, createdAt: new Date() });
 
-      const redirectUrl = `${req.path}${req.url.includes("?") ? "?" + req.url.split("?")[1] : ""}`;
+      const redirectUrl = destinationUrlForAuthLogin(req);
 
       console.log(`  → Branch 2: Bearer token → created session ${newSessionId.slice(0, 8)}… → 302 ${redirectUrl}`);
 
@@ -210,24 +220,18 @@ export function createApp() {
       return;
     }
 
-    // ---- 3. No session, appLoggedIn=true → redirect to /auth/login -------
+    // ---- 3. No session, appLoggedIn=true → redirect to /auth/login ------
     const appLoggedIn = req.query.appLoggedIn;
     if (appLoggedIn === "true") {
-      // Strip appLoggedIn from the destination so the redirect is clean
-      const params = new URLSearchParams(req.query as Record<string, string>);
-      params.delete("appLoggedIn");
-      const dest = params.toString()
-        ? `${req.path}?${params.toString()}`
-        : req.path;
-
+      const dest = destinationUrlForAuthLogin(req);
       console.log(`  → Branch 3: appLoggedIn=true → 302 /auth/login?destinationUrl=${encodeURIComponent(dest)}`);
       res.redirect(302, `/auth/login?destinationUrl=${encodeURIComponent(dest)}`);
       return;
     }
 
-    // ---- 4. No session, not logged in → show login page ---------------
+    // ---- 4. No session, not logged in → show login page ----------------
     console.log(`  → Branch 4: no session, no appLoggedIn → login page`);
-    res.status(200).send(loginPage(req.path));
+    res.status(200).send(loginPage(destinationUrlForAuthLogin(req)));
   });
 
   return app;
