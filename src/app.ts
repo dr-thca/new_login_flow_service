@@ -174,7 +174,7 @@ export function createApp() {
     if (sessionId && sessions.has(sessionId)) {
       const session = sessions.get(sessionId)!;
       console.log(`  → Branch 1: session found (${sessionId.slice(0, 8)}…, user=${session.userId})`);
-      res.status(200).send(destinationPage(destinationUrlForAuthLogin(req), session.userId));
+      res.status(200).send(destinationPage(fullRequestUrl(req), session.userId));
       return;
     }
 
@@ -210,7 +210,7 @@ export function createApp() {
       const newSessionId = uuid();
       sessions.set(newSessionId, { userId, createdAt: new Date() });
 
-      const redirectUrl = destinationUrlForAuthLogin(req);
+      const redirectUrl = fullRequestUrl(req);
 
       console.log(`  → Branch 2: Bearer token → created session ${newSessionId.slice(0, 8)}… → 302 ${redirectUrl}`);
 
